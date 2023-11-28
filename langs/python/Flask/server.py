@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 
 from flask import Flask
 from flask_login import LoginManager
@@ -44,7 +45,8 @@ def create_app():
     lm.init_app(app)
     lm.login_view = "login_page"
     
-    db = Database()
+    db = Database(os.path.join(".", "db", "movies.db"))
+    db.create_db()
     app.config["db"] = db
     
     return app
