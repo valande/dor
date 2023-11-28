@@ -2,11 +2,35 @@
 
 from datetime import datetime
 
-from flask import request, redirect, url_for, abort, current_app, render_template
+from flask import request, redirect, url_for, abort, current_app, render_template, flash
+from flask_login import login_user, logout_user, login_required, current_user
+from passlib.hash import pbkdf2_sha256 as hasher
 
 from movie import Movie
+from forms import MovieEditForm, LoginForm
+from user import get_user
 
-from forms import MovieEditForm
+
+def login_page():
+    form = LoginForm()
+    if form.validate_on_submit():
+        username = form.data["username"]
+        user = get_user(username)
+        if user is not None:
+            password = form.data["password"]
+            if hasher.verify(password, user.password):
+                login_user(user)
+                flash("You have logged in.")
+                next_page = request.args.get("next", url_for("home_page"))
+                return redirect(next_page)
+        flash("Invalid credentials.")
+    return render_template("login.html", form=form)
+
+def logout_page():
+    logout_user()
+    flash("You have logged out.")
+    return redirect(url_for("home_page"))
+
 
 def home_page():
     today = datetime.today()
@@ -19,9 +43,12 @@ def movies_page():
         movies = db.get_movies()
         return render_template("movies.html", movies=sorted(movies))
     else:
+        if not current_user.is_admin:
+            abort(401)
         form_movie_keys = request.form.getlist("movie_keys")
         for form_movie_key in form_movie_keys:
             db.delete_movie(int(form_movie_key))
+        flash("%(num)d movies deleted." % {"num": len(form_movie_keys)})
         return redirect(url_for("movies_page"))
 
 def movie_page(movie_key):
@@ -55,6 +82,7 @@ def validate_movie_form(form):
 
     return len(form.errors) == 0
 
+@login_required
 def movie_add_page():
     form = MovieEditForm()
     if form.validate_on_submit():
@@ -66,7 +94,7 @@ def movie_add_page():
         return redirect(url_for("movie_page", movie_key=movie_key))
     return render_template("movie_edit.html", form=form)
 
-
+@login_required
 def movie_edit_page(movie_key):
     db = current_app.config["db"]
     movie = db.get_movie(movie_key)
